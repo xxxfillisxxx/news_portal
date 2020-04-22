@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/vue@2.6.11"></script>
+<script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+<script src="https://unpkg.com/vue-router"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@mdi/font@4.x/css/materialdesignicons.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css" rel="stylesheet">
+
+<title>News</title>
+</head>
+<body>
+<div id="app">
+   <v-app>
+     <router-view></router-view>
+   </v-app>
+</div>
+
+</body>
+  <script>
+  var formNews={
+    template:`
+      <v-conteiner>
+        <v-content>
+          <v-btn class="mx-2" :fab="type=='create'" dark color="indigo" @click="dialog=!dialog">
+             <v-icon v-if="type=='create'" dark>mdi-plus</v-icon>
+             <span v-if="type=='edit'">Редактировать</span>
+          </v-btn>
+          <v-dialog v-model="dialog" persistent max-width="800px">
+          <v-form id="form">
+            <v-card>
+              <v-card-title>
+                <span class="headline">{{type=='create'?'Добавить новость':'Изменить новость'}}</span>
+              </v-card-title>
+              <v-card-text>
+                <v-container>
+                  <v-row>
+                    <v-col cols="12">
+                    <v-text-field
+                      v-model="newNews.title"
+                      label="Заголовок"
+                      required>
+                    </v-text-field>
+                  </v-col>
+                  <v-col cols="12">
+                    <v-textarea
+                      v-model="newNews.description"
+                      label="Краткое описание"
+                      rows="2"
+                      required
+                    ></v-textarea>
+                  </v-col>
+                  <v-col cols="12"><v-textarea
+                    v-model="newNews.text"
+                    label="Текст"
+                    rows="4"
+                    required
+                  >
+                  </v-textarea>
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-select
+                    v-model="newNews.heading"
+                    :items="headers"
+                    item-text="heading"
+                    item-value="id"
+                    label="Раздел"
+                    required
+                  ></v-select>
+                  </v-col>
+                  <v-col cols="12">
+                    <v-img v-if="imageSrc!='/img/null'||imageSrc!='/img/'" :src="imageSrc" max-weight="100%" > </v-img>
+                  </v-col>
+                  <v-col cols="12">
+                    <v-btn class="warning" @click="trigerUpload">Изображение
+                      <v-icon right dark>mdi-cloud-upload</v-icon></v-btn>
+                        <input id="file" ref="fileInput" type="file" style="display: none;" accept="image/*" @change="onFileChange">
+                  </v-col>
+                  <v-col cols="12" sm="6">
+                    <v-menu
+                      ref="menu1"
+                      v-model="menu1"
+                      :close-on-content-click="false"
+                      transition="scale-transition"
+                      offset-y
+                      max-width="290px"
+                      min-width="290px"
+                    >
+                      <template v-slot:activator="{ on }">
+                        <v-text-field
+                          v-model="date"
+                          label="Дата"
+                          persistent-hint
+                          @blur="date=parseDate(date)"
+                          v-on="on"
+                      ></v-text-field>
+                      </template>
+                        <v-date-picker v-model="date" no-title @input="menu1 = false"></v-date-picker>
+                    </v-menu>
+                  </v-col>
+                  <v-col cols="12" sm="6">
+                    <v-menu
+                      ref="menu"
+                      v-model="menu2"
+                      :close-on-content-click="false"
+                      :nudge-right="40"
+                      :return-value.sync="time"
+                      transition="scale-transition"
+                      offset-y
+                      max-width="290px"
+                      min-width="290px"
+                    >
+                      <template v-slot:activator="{ on }">
+                        <v-text-field
+                          v-model="time"
+                          label="Время"
+                          readonly
+                          v-on="on"
+                        ></v-text-field>
+                      </template>
+                        <v-time-picker
+                          v-if="menu2"
+                          v-model="time"
+                          full-width
+                          @click:minute="$refs.menu.save(time)"
+                        ></v-time-picker>
+                      </v-menu>
+                    </v-col>
+                  </v-row>
+                </v-card-text>
+                <v-card-actions>
+                  <v-spacer></v-spacer>
+                    <v-btn color="blue darken-1" text @click="dialog = false">Закрыть</v-btn>
+                    <v-btn color="blue darken-1" text @click="type=='create'?createNews(newNews):changeNews(newNews)">Сохранить</v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-form>
+          </v-dialog>
+        </v-content>
+      </v-conteiner>
+    `,
+    props: {
+      type: String,
+      newNews : {
+        type: Object,
+        default: function () {
+          return {
+            description: '',
+            text: '',
+            date: '',
+            heading: '',
+            url_pic: '',
+          }
+        }
+      },
+      headers:{
+        type: Array
+      }
+    },
+    data(){
+      return{
+        dialog: false,
+        imageSrc: '/img/'+this.newNews.url_pic,
+        date: this.newNews.date?new Date(this.newNews.date).toISOString().substr(0, 10):new Date().toISOString().substr(0, 10),
+        dateFormatted:null,
+        menu1: false,
+        menu2: false,
+        time: this.newNews.date?new Date(this.newNews.date).getHours().toString()+':'+new Date(this.newNews.date).getMinutes().toString().padStart(2 ,"0"):new Date().getHours().toString()+':'+new Date().getMinutes().toString().padStart(2 ,"0"),
+        modal2: false,
+      }
+    },
+    watch: {
+      date (val) {
+        this.dateFormatted = this.formatDate(this.date)
+      },
+    },
+    computed:{
+      computedDateFormatted () {
+        return this.formatDate(this.date)
+      }
+    },
+    methods:{
+      formatDate (date) {
+        if (!date) return null
+           const [year, month, day] = date.split('-')
+           return `${year}-${month}-${day}`
+        },
+      parseDate (date) {
+        if (!date) return null
+          const [year, month, day ] = date.split('-')
+          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+        },
+      trigerUpload (){
+        this.$refs.fileInput.click()
+      },
+      onFileChange(event){
+        const file=event.target.files[0]
+        const reader= new FileReader()
+        reader.onload = e => {
+          this.imageSrc=reader.result
+        }
+        reader.readAsDataURL(file)
+        this.image=file
+      },
+      createNews: async function(news){
+        news.date=this.date+' '+this.time+':00'
+        var data = new FormData(form);
+        for ( var key in news ) {
+          data.append(key, news[key]);
+        }
+        data.append('type', 'createNews')
+        data.append('file', document.getElementById('file').files[0])
+
+        await axios
+          .post("/index.php", data, {
+            headers: {
+              'Content-Type': 'form/multipart',
+            }
+          })
+          .then(response => {
+            this.dialog=false,
+            this.$emit('getAllNews')
+          })
+        },
+        changeNews: async function(news){
+          news.date=this.date+' '+this.time+':00'
+          var data = new FormData(form);
+          for ( var key in news ) {
+            data.append(key, news[key]);
+          }
+          data.append('type', 'changeNews')
+          data.append('file', document.getElementById('file').files[0])
+
+          if(this.imageSrc!='/img/'){
+              data.append('file', document.getElementById('file').files[0])
+          }
+          await axios
+            .post("/index.php", data, {
+               headers: {
+                 'Content-Type': 'form/multipart',
+               }
+            })
+            .then(response => {
+              this.dialog=false,
+              this.$emit('getNewsById')
+            })
+          },
+        },
+      }
+  var newsCard = {
+      template: `
+      <v-row
+          align="center"
+          justify="center"
+        >
+          <v-col
+            cols="10"
+            >
+            <v-hover
+              v-slot:default="{hover}"
+              >
+            <router-link :to="{name: 'News', params: {id:news.id}}" >
+            <v-card
+              max-width="80%"
+              class="mx-auto"
+            >
+              <v-row>
+                <v-col
+                  cols="10"
+                >
+              <v-card-title class="headline" >{{news.title}}</v-card-title>
+              <v-card-text>
+                 {{news.description}}
+              </v-col>
+              </v-card-text>
+                <v-col
+                  cols="2"
+                >
+                  <v-img
+                    v-if="news.url_pic"
+                    class="white--text"
+                    height="100px"
+                    contain
+                    :src="imgNews">
+                  </v-img>
+                  </v-col>
+                </v-row>
+              <v-card-actions>
+                <v-row
+                  align="center"
+                  justify="end"
+                >
+                  <v-col xs="4" sm="4" md="2">
+                    <span >
+                     {{dateNews}}
+                    </span>
+                  </v-col>
+                  <v-col xs="4" sm="4" md="2">
+                   <span >
+                     {{news.likes}}
+                   </span>
+                   <v-icon >mdi-heart</v-icon>
+                  </v-col>
+                </v-row>
+              </v-card-actions>
+            </v-card>
+           </router-link>
+          </v-hover>
+        </v-col>
+       </v-row>
+      `,
+      props: ['news'],
+      computed: {
+        dateNews() {
+          return new Date(this.news.date).getDate() + ' ' + this.month[new Date(this.news.date).getMonth()] + ' ' + new Date(this.news.date).getFullYear() + ' ' + new Date(this.news.date).getHours() + ':' + new Date(this.news.date).getMinutes().toString().padStart(2, "0")
+        },
+        imgNews() {
+          return '/img/' + this.news.url_pic
+        },
+      },
+      data() {
+        return {
+          month: ["января", "февраля", "марта", "апреля", "мая", "июня", "июдя", "августа", "сентября", "октября", "ноября", "декабря"],
+        }
+      }
+  }
+  var home={
+    template:`
+      <v-content>
+        <v-container
+        fluid
+        >
+          <v-row
+            align="end"
+            justify="center"
+          >
+            <v-col
+              cols="8"
+            >
+              <v-row
+                align="end">
+                <v-col
+                  justify="start"
+                >
+                  <formNews type="create" :headers="headers" @getAllNews="getAllNews"></formNews>
+                </v-col>
+                <v-spacer></v-spacer>
+                <v-col
+                  cols="4"
+                  xs="12" sm="4" md="4"
+                >
+                  <v-select
+                    :items="sortBy"
+                    v-model="sort"
+                    label="Сортировка по"
+
+                  ></v-select>
+                </v-col>
+                <v-col
+                  cols="4"
+                  xs="12" sm="4" md="4"
+                >
+                  <v-select
+                    v-model="selectHeaders"
+                    :items="headers"
+                    item-text="heading"
+                    item-value="id"
+                    chips
+                    label="Сортировка по разделу"
+                    multiple
+                  >
+                  </v-select>
+                </v-col>
+
+            </v-col>
+          </v-row>
+          <div v-for="record in filtered" >
+            <newsCard :news="record" ></newsCard>
+          </div>
+        </v-container>
+      </v-content>
+  `,
+  components: {newsCard, formNews},
+  methods:{
+    async getAllNews() {
+      await axios
+        .post("/index.php", {
+          type: 'getNews'
+          },
+          {
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          })
+        .then(response => {
+           this.news=response.data.news
+           this.headers=response.data.headers
+        })
+        .catch(function(e){
+          this.error = e;
+        })
+        },
+
+   },
+
+   data(){
+      return{
+        loading: false,
+        dialog: false,
+        image: null,
+        date: new Date().toISOString().substr(0, 10),
+        news: [],
+        headers:[],
+        selectHeaders:[],
+        sortBy:['Дате', 'Количеству лайков'
+          ],
+        sort: 'Дате',
+        month:["января", "февраля", "марта", "апреля", "мая", "июня", "июдя", "августа", "сентября", "октября", "ноября", "декабря"],
+        dateNews: null
+      }},
+    mounted:
+      async function getNews() {
+         await axios
+           .post("/index.php", {
+              type: 'getNews'
+           },
+           {
+             withCredentials: true,
+             headers: {
+              'Content-Type': 'application/json',
+             }})
+           .then(response => {
+             this.news=response.data.news
+             this.headers=response.data.headers
+           })
+           .catch(function(e){
+             this.error = e;
+           })
+           },
+    computed:{
+      filtered(){
+        if (this.selectHeaders.length!=0)
+          {
+            return this.news.filter(news => this.selectHeaders.includes(news.heading))
+                      .sort((a,b)=>{
+                          if (this.sort=='Дате'){
+                              var dateA= new Date(a.date)
+                              var dateB= new Date(b.date)
+                              return dateB-dateA
+                          }
+                          if (this.sort=='Количеству лайков'){
+                              return b.likes-a.likes
+
+                          }
+                      })
+          }
+        else {
+          return this.news.sort((a,b)=>{
+              if (this.sort=='Дате'){
+                  var dateA= new Date(a.date)
+                  var dateB= new Date(b.date)
+                  return dateB-dateA
+              }
+              if (this.sort=='Количеству лайков'){
+                  return b.likes-a.likes
+
+              }
+          })
+        }
+      }
+    }
+  };
+  var news={
+    template:`
+      <v-content>
+        <v-conteiner>
+          <v-row
+            align="center"
+            justify="center"
+          >
+            <v-col cols="8">
+              <router-link to="/">Главная</router-link>
+                <v-card
+                  class="mx-auto"
+                >
+                  <v-img
+                    v-if="currentNews.url_pic!='null'"
+                    class="white--text"
+                    height="500px"
+                    contain
+                    :src="imgCurrentNews">
+                  </v-img>
+                  <v-card-title class="headline" >{{currentNews.title}}
+                  </v-card-title>
+                  <v-card-text v-html="currentNews.text">
+                  </v-card-text>
+                  <v-card-actions>
+                    <v-row
+                      align="center"
+                      justify="end"
+                    >
+                      <v-col
+                        xs="4" sm="4" md="2"
+                      >
+                        <formNews type="edit" :newNews="currentNews" :headers="headers" @getNewsById="getNewsById"></formNews>
+                      </v-col>
+                      <v-col
+                        xs="4" sm="4" md="2"
+                      >
+                        <v-btn class="mx-2" dark color="indigo" @click="delNews">
+                          Удалить
+                        </v-btn>
+                        </v-col>
+                          <v-spacer></v-spacer>
+                        <v-col
+                          xs="4" sm="4" md="2"
+                        >
+                          {{dateCurrentNews}}
+                        </v-col>
+                        <v-col xs="4" sm="4" md="2">
+                          <span >
+                            {{currentNews.likes}}
+                          </span>
+                          <v-btn icon @click="like">
+                          <v-icon>{{currentNews.liked==1?'mdi-heart':'mdi-heart-outline'}}</v-icon>
+                          </v-btn>
+                        </v-col>
+                      </v-row>
+                    </v-card-actions>
+                  </v-card>
+                </v-col>
+              </v-row>
+            </v-conteiner>
+          </v-content>
+    `,
+    data(){
+      return{
+        currentNews: null,
+        month:["января", "февраля", "марта", "апреля", "мая", "июня", "июдя", "августа", "сентября", "октября", "ноября", "декабря"],
+        dateNews: null,
+        headers:null
+      }
+    },
+    props:[],
+    components:{
+      formNews
+    },
+    mounted:
+      async function getNewsById() {
+        await axios
+         .post("/index.php", {
+            type: 'getNewsById',
+            id: this.$route.params.id
+         },
+         {
+           withCredentials: true,
+           headers: {
+             'Content-Type': 'application/json',
+           }
+         }
+         )
+         .then(response => {
+           this.currentNews=response.data.news[0]
+           this.headers=response.data.headers
+         })
+         .catch(function(e){
+           this.error = e;
+         })
+         },
+    methods:{
+      like: async function(){
+        await axios
+          .post("/index.php", {
+            type: 'liked',
+            id: this.$route.params.id,
+           },
+           {
+             withCredentials: true,
+             headers: {
+               'Content-Type': 'application/json',
+             },
+           })
+           .then(response => {
+             this.currentNews=response.data.news[0]
+           })
+           this.dialog=false
+      },
+      getNewsById: async function () {
+        await axios
+         .post("/index.php", {
+           type: 'getNewsById',
+           id: this.$route.params.id
+         },
+         {
+           withCredentials: true,
+           headers: {
+            'Content-Type': 'application/json',
+           }
+         })
+         .then(response => {
+           this.currentNews=response.data.news[0]
+         })
+        .catch(function(e){
+          this.error = e;
+        })
+      },
+      delNews: async function(){
+        await axios
+         .post("/index.php", {
+            type: 'delNewsById',
+            id: this.$route.params.id
+         },
+         {
+           withCredentials: true,
+           headers: {
+             'Content-Type': 'application/json',
+           }})
+         .then(response => {
+           this.currentNews=response.data[0]
+           this.$router.push({name:'Home'})
+         })
+         .catch(function(e){
+           this.error = e;
+         })
+         },
+    },
+    computed:{
+      dateCurrentNews(){
+       return new Date(this.currentNews.date).getDate()+' '+this.month[new Date(this.currentNews.date).getMonth()]+' '+ new Date(this.currentNews.date).getFullYear()+' '+new Date (this.currentNews.date).getHours()+':'+new Date (this.currentNews.date).getMinutes().toString().padStart(2 ,"0")
+      },
+      imgCurrentNews(){
+        return '/img/'+this.currentNews.url_pic
+      }
+    }
+  };
+  var router= new VueRouter({
+    mode: 'history',
+    routes: [
+      {
+        path: '/',
+        name: 'Home',
+        component: home
+      },
+      {
+        path: '/:id',
+        name: 'News',
+        component: news
+      },
+    ]
+  });
+  var app = new Vue({
+    el: '#app',
+    data:{
+      loading: false,
+      },
+    vuetify: new Vuetify(),
+    router: router,
+    })
+</script>
+<style>
+  a {
+    text-decoration: none;
+  }
+</style>
+</html>                              
